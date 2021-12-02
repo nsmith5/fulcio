@@ -136,6 +136,7 @@ func (fc *FulcioConfig) GetVerifier(issuerURL string) (*oidc.IDTokenVerifier, bo
 type IssuerType string
 
 const (
+	IssuerTypeCircleCI       = "circleci"
 	IssuerTypeEmail          = "email"
 	IssuerTypeGithubWorkflow = "github-workflow"
 	IssuerTypeKubernetes     = "kubernetes"

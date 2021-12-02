@@ -38,6 +38,7 @@ const (
 	SpiffeValue
 	GithubWorkflowValue
 	KubernetesValue
+	CircleCIValue
 )
 
 type AdditionalInfo int
@@ -202,6 +203,36 @@ func GithubWorkflow(ctx context.Context, principal *oidc.IDToken, pubKey crypto.
 	}, nil
 }
 
+func CircleCI(ctx context.Context, principal *oidc.IDToken, pubKey crypto.PublicKey, challenge []byte) (*ChallengeResult, error) {
+	projectURI, err := circleCIProjectFromIDToken(principal)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check the proof
+	if err := CheckSignature(pubKey, challenge, principal.Subject); err != nil {
+		return nil, err
+	}
+
+	cfg, ok := config.FromContext(ctx).GetIssuer(principal.Issuer)
+	if !ok {
+		return nil, errors.New("invalid configuration for OIDC ID Token issuer")
+	}
+
+	issuer, err := oauthflow.IssuerFromIDToken(principal, cfg.IssuerClaim)
+	if err != nil {
+		return nil, err
+	}
+
+	// Now issue cert!
+	return &ChallengeResult{
+		Issuer:    issuer,
+		PublicKey: pubKey,
+		TypeVal:   CircleCIValue,
+		Value:     projectURI,
+	}, nil
+}
+
 func kubernetesToken(token *oidc.IDToken) (string, error) {
 	// Extract custom claims
 	var claims struct {
@@ -267,6 +298,17 @@ func workflowInfoFromIDToken(token *oidc.IDToken) (map[AdditionalInfo]string, er
 	return map[AdditionalInfo]string{
 		GithubWorkflowSha:     claims.Sha,
 		GithubWorkflowTrigger: claims.Trigger}, nil
+}
+
+func circleCIProjectFromIDToken(token *oidc.IDToken) (string, error) {
+	var claims struct {
+		ProjectID string `json:"oidc.circleci.com/project-id"`
+	}
+	if err := token.Claims(&claims); err != nil {
+		return "", err
+	}
+
+	return "https://circleci.com/project/" + claims.ProjectID, nil
 }
 
 func isSpiffeIDAllowed(host, spiffeID string) bool {
